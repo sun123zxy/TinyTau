@@ -33,16 +33,14 @@ sync-min-interval: 24
 # Set to false to disable automatic bumps.
 bump: true
 
-# Whether the worker automatically pushes to the remote after committing.
-# Set to true to run `git push` after each Sync, Bump, Refactor, or Feat commit;
-# set to false to keep commits local.
+# Whether the worker automatically pushes committed work to the remote.
+# Set to false to keep commits local.
 auto-push: true
 
-# Minimum gap, in hours, between the last successful Pages site build and a new
-# automatic build triggered on push (see .github/workflows/pages.yml).
-# Use a positive number (e.g. 8) to throttle automatic builds, or 0 to never
-# build automatically on push (manual workflow_dispatch runs still build).
-docs-min-interval: 8
+# Minimum whole minutes between successful automatic pushes from this clone.
+# A worker leaves commits local during the interval and can push them later.
+# Use 0 to push without waiting for a minimum interval.
+push-min-interval: 10
 
 # Optional Quarto profile (or comma-separated profiles) passed as `--profile`
 # when rendering roadmap/ via .tinytau/scripts/build-roadmap.sh.

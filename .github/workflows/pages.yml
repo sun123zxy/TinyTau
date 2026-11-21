@@ -5,62 +5,22 @@ on:
     branches:
       - 'main'
       - 'master'
-  workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  actions: read
   contents: read
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  queue: max
 
 jobs:
-  check:
-    runs-on: ubuntu-24.04
-    outputs:
-      should_run: ${{ steps.gate.outputs.should_run }}
-    steps:
-      - name: Checkout config
-        if: github.event_name != 'workflow_dispatch'
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: .tinytau
-
-      - name: Check docs build time gate
-        id: gate
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          INTERVAL="$(yq '."docs-min-interval" // 0' .tinytau/config.yml)"
-          if [ -z "$INTERVAL" ] || awk "BEGIN {exit !($INTERVAL <= 0)}"; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          LAST_TS="$(gh run list -R "${{ github.repository }}" -w pages.yml -s success -L 1 --json updatedAt --jq '.[0].updatedAt // empty')"
-          if [ -z "$LAST_TS" ] || awk -v now="$(date -u +%s)" -v last="$(date -u -d "$LAST_TS" +%s)" -v h="$INTERVAL" 'BEGIN {exit !((now - last) >= h * 3600)}'; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
-
   build-and-deploy:
-    needs: check
-    if: needs.check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Cleanup to free disk space
@@ -84,44 +44,20 @@ jobs:
         shell: bash
         run: bash .tinytau/scripts/build-roadmap.sh
 
-      - name: Build Lean project
-        uses: leanprover/lean-action@v1
-
-      - name: Compute dependency doc cache paths
-        id: metadata
-        shell: bash
-        run: |
-          {
-            echo "cached_docbuild_dependencies<<PATHS"
-            python3 .tinytau/scripts/parse-lake-metadata.py --print-cache-paths
-            echo "PATHS"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Cache dependency docs
-        if: steps.metadata.outputs.cached_docbuild_dependencies != ''
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.metadata.outputs.cached_docbuild_dependencies }}
-          key: Docs-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
-
-      - name: Build API documentation to _site/docs
-        shell: bash
-        run: bash .tinytau/scripts/build-docs.sh
-
       - name: Copy root pages to _site
         shell: bash
         run: |
           mkdir -p _site
           cp -r .tinytau/page/. _site/
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: Build Lean project
+        uses: leanprover/lean-action@v1
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Build API documentation and deploy to GitHub Pages
+        uses: leanprover-community/docgen-action@main
         with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          homepage: _site
+          build-page: false
+          api-docs: true
+          use-github-cache: true
+          deploy: true

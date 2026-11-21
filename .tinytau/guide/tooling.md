@@ -9,8 +9,12 @@ TinyTau relies on a small set of standard tools shared between local execution a
 
 - **Lean 4 & Lake (`lean-action.yml`)**: Compiles the Lean library (`lake build --wfail`) and runs [`leanprover-community/axiom-audit`](https://github.com/leanprover-community/axiom-audit) to verify that every declaration depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`), catching any `sorryAx` (`sorry`/`admit`), `Lean.ofReduceBool` (`native_decide`), or custom `axiom`s.
 - **Upstream Roadmap Integrity (`compare-human.sh`)**: Uses pure `git` tree diffs to verify that all human-authored files under `roadmap/` (every file whose stem does not end in `-ai`) match `human-repo` at `.tinytau/sync.yml`'s `human-sha` byte-for-byte.
-- **API Documentation (`build-docs.sh` + `parse-lake-metadata.py`)**: Uses [`doc-gen4`](https://github.com/leanprover/doc-gen4) in a temporary `docbuild/` Lake workspace (matching the official `leanprover-community/docgen-action` layout) to generate HTML API reference pages under `_site/docs/`.
+- **API Documentation (`docgen-action` in CI / `build-docs.sh` locally)**: GitHub Actions ([`.github/workflows/pages.yml`](/.github/workflows/pages.yml)) builds and caches [`doc-gen4`](https://github.com/leanprover/doc-gen4) API reference pages into `_site/docs/` and deploys `_site/` to GitHub Pages on every `push` to `main` or `master` via [`leanprover-community/docgen-action`](https://github.com/leanprover-community/docgen-action). Locally, `build-docs.sh` + `parse-lake-metadata.py` remain available to build `_site/docs/` in a temporary `docbuild/` Lake workspace for previewing.
 - **Roadmap Rendering (`build-roadmap.sh` + `tinytau.lua`)**: Uses [Quarto](https://quarto.org/) to render `roadmap/` into `_site/roadmap/`. During rendering, `.tinytau/scripts/tinytau.lua` hooks into Quarto's `pre-ast` filter stage (`quarto.doc`, `quarto.project.offset`, `quarto.utils`), reads each document's paired `<stem>-ai.yml` sidecar, and appends a `.tinytau-meta` block (`Status`, `docs` links, `Depends` links, and `Note` with Quarto `@crossref` support) to the end of each matching `::: {#id}` block.
+
+## Automatic Worker Pushes
+
+The [worker](/.tinytau/prompt/worker.md#automatic-pushes) checks the interval before automatically pushing. Configure it with `push-min-interval` in [`.tinytau/config.yml`](/.tinytau/config.yml). The default is 10 minutes and `0` disables the interval. The last successful automatic push time is local to the clone. A later worker invocation can publish deferred commits. Manual `git push` remains available.
 
 ## Running `compare-human` Locally
 
