@@ -13,13 +13,21 @@ echo "human-repo=${HUMAN_REPO} human-directory=/${HUMAN_DIR} human-sha=${HUMAN_S
 AI_REGEX='(.*/)?[^/]*-ai(\.[^/.]*)?$'
 
 if [ -z "${HUMAN_SHA}" ] || [ "${HUMAN_SHA}" = "null" ]; then
+  # Before the first sync there is no source commit to compare against.
+  # The roadmap may be absent or contain only AI-maintained files.
   if git rev-parse --verify -q HEAD:roadmap >/dev/null; then
-    extra="$(git -c core.quotepath=false ls-tree -r --name-only HEAD:roadmap | grep -vE "^${AI_REGEX}" || true)"
+    # grep returns 1 if no human files were listed. Handle that status
+    # here so pipefail still reports errors from git ls-tree.
+    extra="$(git -c core.quotepath=false ls-tree -r --name-only HEAD:roadmap |
+      { grep -vE "^${AI_REGEX}" || [ "$?" -eq 1 ]; })"
     if [ -n "${extra}" ]; then
       echo "FAIL: human-sha is null, but human-authored files exist under roadmap/:"
       echo "${extra}"
       exit 1
     fi
+  else
+    status=$?
+    [ "$status" -eq 1 ] || exit "$status"
   fi
   echo "PASS: human-sha is null and roadmap/ has no human-authored files."
   exit 0
@@ -41,8 +49,11 @@ if ! git rev-parse --verify -q HEAD:roadmap >/dev/null; then
   exit 1
 fi
 
-# Diff upstream tree vs HEAD:roadmap, ignoring AI-maintained (*-ai.*) files
-diff_out="$(git -c core.quotepath=false diff --name-status --no-renames "${UPSTREAM}" HEAD:roadmap | grep -vE "^[^[:space:]]+[[:space:]]+${AI_REGEX}" || true)"
+# Compare the committed roadmap with its source, ignoring AI-maintained files.
+# grep returns 1 if there are no human-file changes. Handle that status
+# inside the pipeline so pipefail still reports errors from git diff.
+diff_out="$(git -c core.quotepath=false diff --name-status --no-renames "${UPSTREAM}" HEAD:roadmap |
+  { grep -vE "^[^[:space:]]+[[:space:]]+${AI_REGEX}" || [ "$?" -eq 1 ]; })"
 if [ -n "${diff_out}" ]; then
   echo "FAIL: roadmap/ human-authored files differ from ${UPSTREAM}:"
   echo "${diff_out}"
